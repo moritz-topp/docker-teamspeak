@@ -1,0 +1,55 @@
+name: latest
+
+on:
+    push:
+        branches:
+            - master
+
+    # Run tests for any PRs.
+    pull_request:
+    # Enable manual Starts
+    workflow_dispatch:
+    # Enable schedule building
+    schedule:
+        - cron: "0 3 * * 3"
+env:
+    # Docker NAMESPACE
+    NAMESPACE: moritztopp
+jobs:
+    # Run Tests for PRs
+    test:
+        if: ${{ github.event_name == 'pull_request' }}
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v2
+
+            - name: Log into registry
+              run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u $NAMESPACE --password-stdin
+
+            - name: Pull from registry
+              run:  docker pull $NAMESPACE/${{ github.event.repository.name }}:$GITHUB_WORKFLOW
+
+            - name: Try to Build
+              run: docker build . --file $GITHUB_WORKFLOW.Dockerfile --tag $NAMESPACE/${{ github.event.repository.name }}:$GITHUB_WORKFLOW
+    # Build the Docker Image
+    build:
+        if: ${{ github.event_name != 'pull_request' }}
+        runs-on: ubuntu-latest
+
+        steps:
+            - uses: actions/checkout@v2
+
+            - name: Set $REPOSITORY_NAME Variables
+              run: echo "REPOSITORY_NAME=$(echo '${{ github.repository }}' | awk -F '/' '{print $2}')" >> $GITHUB_ENV
+
+            - name: Set $IMAGE Variables
+              run: echo "IMAGE=$(echo $NAMESPACE/$REPOSITORY_NAME:$GITHUB_WORKFLOW)" >> $GITHUB_ENV
+
+            - name: Log into registry
+              run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u $NAMESPACE --password-stdin
+
+            - name: Build
+              run: docker build . --no-cache --file $GITHUB_WORKFLOW.Dockerfile --tag $IMAGE
+
+            - name: Push to registry
+              run:  docker push $IMAGE
